@@ -115,16 +115,7 @@ Add the following blocks to your app's `MainActivity`:
 
 ```java
 
-import com.hoxfon.react.RNTwilioVoice.TwilioModule; 
-
-import com.hoxfon.react.RNTwilioVoice.TwilioVoiceModule;
-import com.facebook.react.ReactActivity;
-import com.facebook.react.ReactActivityDelegate;
-import com.facebook.react.ReactRootView;
-import android.os.Bundle;
-import android.os.Build;
-import com.swmansion.gesturehandler.react.RNGestureHandlerEnabledRootView;
-import android.view.WindowManager;
+import com.hoxfon.react.RNTwilioVoice.TwilioModule;
 ...
 
 public class MainActivity extends ReactActivity {
