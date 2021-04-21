@@ -1,13 +1,196 @@
 # react-native-twilio-programmable-voice
 
-This is a React-Native wrapper for [Twilio Programmable Voice SDK](https://www.twilio.com/voice) which lets you make and receive calls from your React-Native App. This module is not affiliated with nor officially maintained by Twilio, and it is maintained by open source contributors.
+This is a react-native wrapper around [Twilio Programmable Voice SDK](https://www.twilio.com/voice), which allows your react-native app to make and receive calls.
 
-## Twilio Programmable Voice SDK
+This module is not affiliated with nor officially maintained by Twilio. It is maintained by open source contributors working during their nights and weekends.
 
-- Android 4.5.0 (bundled within the module)
-- iOS 5.1.0 (specified by the app's own podfile)
+Tested with:
 
-## Breaking changes in v4.0.0
+- react-native 0.62.2
+- Android 11
+- iOS 14
+
+## Roadmap
+
+### Project 1
+
+The most updated branch is [feat/twilio-android-sdk-5](https://github.com/hoxfon/react-native-twilio-programmable-voice/tree/feat/twilio-android-sdk-5) which is aligned with:
+
+- Android 5.1.1
+- iOS 5.2.0
+
+It contains breaking changes from `react-native-twilio-programmable-voice` v4, and it will be released as v5.
+
+You can install it with:
+
+```bash
+# Yarn
+yarn add https://github.com/hoxfon/react-native-twilio-programmable-voice#feat/twilio-android-sdk-5
+
+# NPM
+npm install git+https://github.com/hoxfon/react-native-twilio-programmable-voice#feat/twilio-android-sdk-5
+
+I am currently updating the library to catchup with all changes published on the latest Android and iOS Twilio Voice SDK:
+
+[iOS changelog](https://www.twilio.com/docs/voice/voip-sdk/ios/changelog)
+[Android changelog](https://www.twilio.com/docs/voice/voip-sdk/android/3x-changelog)
+
+My plan is to use the following links as a reference, and follow Twilio commit by commit.
+
+- https://github.com/twilio/voice-quickstart-android
+- https://github.com/twilio/voice-quickstart-ios
+
+_If you want to contribute please consider helping on this project. [Click here for more information](https://github.com/hoxfon/react-native-twilio-programmable-voice/issues/158)._
+
+### Project 2
+
+Allow Android to use the built in Android telephony service to make and receive calls.
+
+## Stable release
+
+### Twilio Programmable Voice SDK
+
+- Android 4.5.0
+- iOS 5.2.0
+
+
+### Breaking changes in v5.0.0
+
+Changes on [Android Twilio Voice SDK v5](https://www.twilio.com/docs/voice/voip-sdk/android/3x-changelog#500) are reflected in the JavaScript API, the way call invites are handled and ...
+
+- when the app is not in foreground incoming calls result in a heads-up notification with action to "ACCEPT" and "REJECT"
+- ReactMethod `accept` does not dispatch any event. Previously it would dispatch `connectionDidDisconnect`
+- ReactMethod `reject` dispatch a `callInviteCancelled` event instead of `connectionDidDisconnect`
+- ReactMethod `ignore` does not dispatch any event. Previously it would dispatch `connectionDidDisconnect`
+
+To allow the library to show heads up notifications you must add the following lines to your application `android/app/src/main/AndroidManifest.xml`:
+
+```xml
+    <!-- receive calls when the app is in the background-->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <application
+        ...
+    >
+        <!-- Twilio Voice -->
+        <!-- [START fcm_listener] -->
+        <service
+            android:name="com.hoxfon.react.RNTwilioVoice.fcm.VoiceFirebaseMessagingService"
+            android:stopWithTask="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+        <service
+            android:enabled="true"
+            android:name="com.hoxfon.react.RNTwilioVoice.IncomingCallNotificationService"
+            android:foregroundServiceType="phoneCall">
+            <intent-filter>
+                <action android:name="com.hoxfon.react.RNTwilioVoice.ACTION_ACCEPT" />
+                <action android:name="com.hoxfon.react.RNTwilioVoice.ACTION_REJECT" />
+            </intent-filter>
+        </service>
+        <!-- [END fcm_listener] -->
+        <!-- Twilio Voice -->
+    </application>
+```
+
+Firebase Messaging 19.0.+ is imported by this module, so there is no need to import it in your app.
+
+Previously, in order to launch the app when receiving a call, the flow was:
+
+1. the module would launch the app
+2. after the React app is initialised, it would always ask to the native module whether there were incoming call invites
+3. if there where any incoming call invites the module would send an event to the React app with the incoming call invite parameters
+4. the Reach app would listen to the event and launch the view with the appropriate incoming call answer/reject controls
+
+This loop was long and prone to race conditions. In case the event was sent before the React main view was completely initialised, it would not be handled at all.
+
+Version 5.0.0 replaces the previous flow by using `getLaunchOptions()` to pass initial properties from native to React when receiving a call invite as explained here: https://reactnative.dev/docs/communication-android.
+
+The React app will be launched with the initial properties `callInvite` or `call`.
+
+Add the following blocks to your app's `MainActivity`:
+
+```java
+
+import com.hoxfon.react.RNTwilioVoice.TwilioModule; 
+
+import com.hoxfon.react.RNTwilioVoice.TwilioVoiceModule;
+import com.facebook.react.ReactActivity;
+import com.facebook.react.ReactActivityDelegate;
+import com.facebook.react.ReactRootView;
+import android.os.Bundle;
+import android.os.Build;
+import com.swmansion.gesturehandler.react.RNGestureHandlerEnabledRootView;
+import android.view.WindowManager;
+...
+
+public class MainActivity extends ReactActivity {
+
+    @Override
+    protected ReactActivityDelegate createReactActivityDelegate() {
+        return new ReactActivityDelegate(this, getMainComponentName()) {
+            @Override
+            protected ReactRootView createRootView() {
+                return new RNGestureHandlerEnabledRootView(MainActivity.this);
+            }
+            @Override
+            protected Bundle getLaunchOptions() {
+                return TwilioModule.getActivityLaunchOption(this.getPlainActivity().getIntent());
+            }
+        };
+    }
+
+    // ...
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true);
+            setTurnScreenOn(true);
+        }
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                | WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD);
+    }
+
+    // ...
+}
+```
+
+## ICE
+
+See https://www.twilio.com/docs/stun-turn
+
+```bash
+curl -X POST https://api.twilio.com/2010-04-01/Accounts/ACb0b56ae3bf07ce4045620249c3c90b40/Tokens.json \
+-u ACb0b56ae3bf07ce4045620249c3c90b40:f5c84f06e5c02b55fa61696244a17c84
+```
+
+```java
+Set<IceServer> iceServers = new HashSet<>();
+// server URLs returned by calling the Twilio Rest API to generate a new token
+iceServers.add(new IceServer("stun:global.stun.twilio.com:3478?transport=udp"));
+iceServers.add(new IceServer("turn:global.turn.twilio.com:3478?transport=udp","8e6467be547b969ad913f7bdcfb73e411b35f648bd19f2c1cb4161b4d4a067be","n8zwmkgjIOphHN93L/aQxnkUp1xJwrZVLKc/RXL0ZpM="));
+iceServers.add(new IceServer("turn:global.turn.twilio.com:3478?transport=tcp","8e6467be547b969ad913f7bdcfb73e411b35f648bd19f2c1cb4161b4d4a067be","n8zwmkgjIOphHN93L/aQxnkUp1xJwrZVLKc/RXL0ZpM="));
+iceServers.add(new IceServer("turn:global.turn.twilio.com:443?transport=tcp","8e6467be547b969ad913f7bdcfb73e411b35f648bd19f2c1cb4161b4d4a067be","n8zwmkgjIOphHN93L/aQxnkUp1xJwrZVLKc/RXL0ZpM="));
+
+IceOptions iceOptions = new IceOptions.Builder()
+		.iceServers(iceServers)
+		.build();
+
+ConnectOptions connectOptions = new ConnectOptions.Builder(accessToken)
+		.iceOptions(iceOptions)
+		.enableDscp(true)
+		.params(twiMLParams)
+		.build();
+```
+
+### Breaking changes in v4.0.0
 
 The module implements [react-native autolinking](https://github.com/react-native-community/cli/blob/master/docs/autolinking.md) as many other native libraries > react-native 0.60.0, therefore it doesn't need to be linked manually.
 
@@ -53,14 +236,14 @@ iOS application can now receive the following events, that in v3 where only disp
 - connectionIsReconnecting
 - connectionDidReconnect
 
-## Breaking changes in v3.0.0
+### Breaking changes in v3.0.0
 
 - initWitToken returns an object with a property `initialized` instead of `initilized`
 - iOS event `connectionDidConnect` returns the same properties as Android
 move property `to` => `call_to`
 move property `from` => `call_from`
 
-## Installation
+### Installation
 
 Before starting, we recommend you get familiar with [Twilio Programmable Voice SDK](https://www.twilio.com/docs/api/voice-sdk).
 It's easier to integrate this module into your react-native app if you follow the Quick start tutorial from Twilio, because it makes very clear which setup steps are required.
@@ -92,23 +275,8 @@ After you have linked the library with `react-native link react-native-twilio-pr
 check that `libRNTwilioVoice.a` is present under YOUR_TARGET > Build Phases > Link Binaries With Libraries. If it is not present you can add it using the + sign at the bottom of that list.
 </details>
 
-Edit your `Podfile` to include TwilioVoice framework
-
-```ruby
-source 'https://github.com/cocoapods/specs'
-
-# min version for TwilioVoice to work
-platform :ios, '10.0'
-
-target <YOUR_TARGET> do
-    ...
-    pod 'TwilioVoice', '~> 5.2.0'
-    ...
-end
-```
-
 ```bash
-cd ios/ && pod install
+cd ios && pod install
 ```
 
 #### CallKit
@@ -130,7 +298,7 @@ To pass caller's name to CallKit via Voip push notification add custom parameter
 
 Twilio Programmable Voice for iOS utilizes Apple's VoIP Services and VoIP "Push Notifications" instead of FCM. You will need a VoIP Service Certificate from Apple to receive calls. Follow [the official Twilio instructions](https://github.com/twilio/voice-quickstart-ios#7-create-voip-service-certificate) to complete this step.
 
-## Android Installation
+### Android Installation
 
 Setup FCM
 
@@ -144,7 +312,7 @@ buildscript {
     dependencies {
         // override the google-service version if needed
         // https://developers.google.com/android/guides/google-services-plugin
-        classpath 'com.google.gms:google-services:4.3.3'
+        classpath 'com.google.gms:google-services:4.3.4'
     }
 }
 
@@ -161,7 +329,8 @@ apply plugin: 'com.google.gms.google-services'
         <!-- Twilio Voice -->
         <!-- [START fcm_listener] -->
         <service
-            android:name="com.hoxfon.react.RNTwilioVoice.fcm.VoiceFirebaseMessagingService">
+            android:name="com.hoxfon.react.RNTwilioVoice.fcm.VoiceFirebaseMessagingService"
+            android:stopWithTask="false">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
@@ -379,7 +548,7 @@ TwilioVoice.getCallInvite()
         }
     })
 
-// Unregister device with Twilio
+// Unregister device with Twilio (iOS only)
 TwilioVoice.unregister()
 ```
 
